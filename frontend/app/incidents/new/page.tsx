@@ -75,6 +75,18 @@ export default function NewIncidentPage() {
   const [serviceOrCluster, setServiceOrCluster] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isAuthError, setIsAuthError] = useState(false);
+
+  // Check login status on page mount
+  useState(() => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token") || localStorage.getItem("access_token");
+      if (!token || token === "null" || token === "undefined") {
+        setErrorMessage("You are not logged in. Please log in first to create incidents.");
+        setIsAuthError(true);
+      }
+    }
+  });
 
   const applyPreset = (preset: typeof PRESETS[0]) => {
     setApplication(preset.app);
@@ -84,12 +96,13 @@ export default function NewIncidentPage() {
     setDevopsTool(preset.devopsTool);
     setEnvironment(preset.env);
     setServiceOrCluster(preset.service);
-    setErrorMessage("");
+    if (!isAuthError) setErrorMessage("");
   };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
+    setIsAuthError(false);
 
     if (!application.trim() || !error.trim() || !description.trim()) {
       setErrorMessage("Please fill in all required fields (Application, Error, Description).");
@@ -112,7 +125,18 @@ export default function NewIncidentPage() {
       router.push(`/incidents/${incident.id}`);
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(err?.message || "Unable to create incident. Please try again.");
+      const msg = err?.message || "Unable to create incident. Please try again.";
+      if (
+        msg.toLowerCase().includes("token") ||
+        msg.toLowerCase().includes("expired") ||
+        msg.toLowerCase().includes("log in") ||
+        msg.toLowerCase().includes("unauthorized")
+      ) {
+        setIsAuthError(true);
+        setErrorMessage("Your login session has expired. Please log in again to save this incident.");
+      } else {
+        setErrorMessage(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -363,8 +387,16 @@ export default function NewIncidentPage() {
 
               {/* ERROR ALERT */}
               {errorMessage && (
-                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400">
-                  {errorMessage}
+                <div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400">
+                  <span>{errorMessage}</span>
+                  {isAuthError && (
+                    <Link
+                      href="/login"
+                      className="ml-3 shrink-0 rounded-lg bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300 hover:bg-red-500/30 transition"
+                    >
+                      Log In Now →
+                    </Link>
+                  )}
                 </div>
               )}
 

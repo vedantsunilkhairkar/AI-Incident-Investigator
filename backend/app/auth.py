@@ -1,12 +1,14 @@
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from dotenv import load_dotenv
 
 import bcrypt
 from jose import JWTError, jwt
 
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-# Keep the same secret while the application is running.
-# In production, put this in an environment variable.
 SECRET_KEY = os.getenv(
     "JWT_SECRET_KEY",
     "ai-incident-investigator-secret-key-2026"
@@ -14,8 +16,8 @@ SECRET_KEY = os.getenv(
 
 ALGORITHM = "HS256"
 
-# Token valid for 24 hours
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+# Token valid for 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
 
 def hash_password(password: str) -> str:

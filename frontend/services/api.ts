@@ -4,10 +4,12 @@ const API_URL =
 const TOKEN_KEY = "token";
 
 function getToken(): string | null {
-  return (
+  if (typeof window === "undefined") return null;
+  const token =
     localStorage.getItem(TOKEN_KEY) ||
-    localStorage.getItem("access_token")
-  );
+    localStorage.getItem("access_token");
+  if (!token || token === "null" || token === "undefined") return null;
+  return token;
 }
 
 
@@ -157,6 +159,10 @@ export async function createIncident(incidentData: {
   service_or_cluster?: string;
 }) {
   const token = getToken();
+
+  if (!token) {
+    throw new Error("You are not logged in or your session expired. Please log in to create an incident.");
+  }
 
   const response = await fetch(`${API_URL}/incidents`, {
     method: "POST",

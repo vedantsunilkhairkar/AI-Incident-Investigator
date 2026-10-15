@@ -10,6 +10,9 @@ class IncidentCreate(BaseModel):
     error: str
     severity: Literal["Low", "Medium", "High", "Critical"]
     description: str
+    devops_tool: str | None = None
+    environment: str | None = "Production"
+    service_or_cluster: str | None = None
 
     @field_validator("severity", mode="before")
     @classmethod
@@ -43,6 +46,13 @@ class IncidentResponse(BaseModel):
     suggested_solution: str | None = None
     preventive_action: str | None = None
 
+    # DevOps & Infrastructure fields
+    devops_tool: str | None = None
+    environment: str | None = None
+    service_or_cluster: str | None = None
+    ai_remediation_commands: str | None = None
+    ai_runbook: str | None = None
+
     # ML fields
     ml_predicted_severity: str | None = None
     incident_category: str | None = None
@@ -63,3 +73,6 @@ class InvestigationResponse(BaseModel):
     explanation: str
     suggested_solution: str
     preventive_action: str
+    remediation_commands: str | None = None
+    runbook: str | None = None
+    devops_tool: str | None = None

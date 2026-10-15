@@ -1,5 +1,5 @@
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const TOKEN_KEY = "token";
 
@@ -77,10 +77,35 @@ export async function registerUser(userData: {
 
 // ═══════════════════════════ INCIDENTS ═══════════════════════════
 
+export interface Incident {
+  id: number;
+  application: string;
+  error: string;
+  severity: "Low" | "Medium" | "High" | "Critical";
+  description: string;
+  status: "Open" | "Investigating" | "Resolved";
+  root_cause?: string;
+  investigation_severity?: string;
+  explanation?: string;
+  suggested_solution?: string;
+  preventive_action?: string;
+  devops_tool?: string;
+  environment?: string;
+  service_or_cluster?: string;
+  ai_remediation_commands?: string;
+  ai_runbook?: string;
+  ml_predicted_severity?: string;
+  incident_category?: string;
+  similar_incident_ids?: string;
+  created_at?: string;
+}
+
 export async function getIncidents(params?: {
   severity?: string;
   status?: string;
   category?: string;
+  devops_tool?: string;
+  environment?: string;
   skip?: number;
   limit?: number;
 }) {
@@ -90,6 +115,8 @@ export async function getIncidents(params?: {
   if (params?.severity) query.append("severity", params.severity);
   if (params?.status) query.append("status", params.status);
   if (params?.category) query.append("category", params.category);
+  if (params?.devops_tool) query.append("devops_tool", params.devops_tool);
+  if (params?.environment) query.append("environment", params.environment);
   if (params?.skip !== undefined) query.append("skip", String(params.skip));
   if (params?.limit !== undefined) query.append("limit", String(params.limit));
 
@@ -125,6 +152,9 @@ export async function createIncident(incidentData: {
   error: string;
   severity: string;
   description: string;
+  devops_tool?: string;
+  environment?: string;
+  service_or_cluster?: string;
 }) {
   const token = getToken();
 
@@ -139,6 +169,9 @@ export async function createIncident(incidentData: {
       error: incidentData.error,
       severity: incidentData.severity,
       description: incidentData.description,
+      devops_tool: incidentData.devops_tool,
+      environment: incidentData.environment,
+      service_or_cluster: incidentData.service_or_cluster,
     }),
   });
 

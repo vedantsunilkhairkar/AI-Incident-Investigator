@@ -16,17 +16,19 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 EMBEDDING_MODEL = "gemini-embedding-exp-03-07"
 
-# Incident categories for classification
+# DevOps & Incident categories for classification
 INCIDENT_CATEGORIES = [
-    "Database",
-    "Authentication",
-    "Network / Connectivity",
-    "Memory / Performance",
+    "Kubernetes / Container",
+    "Cloud & AWS / GCP",
+    "CI/CD & Pipeline",
+    "Terraform & IaC",
+    "Observability & Prometheus",
+    "Network & Ingress / SSL",
+    "Database & Cache",
+    "Security & IAM",
+    "Memory & CPU Saturation",
     "Application Logic",
-    "Security",
-    "Infrastructure",
-    "Third-party / External API",
-    "Configuration",
+    "Configuration & Drift",
     "Unknown",
 ]
 

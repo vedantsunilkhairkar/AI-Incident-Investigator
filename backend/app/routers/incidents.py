@@ -62,6 +62,8 @@ def add_history(
     explanation: str | None = None,
     suggested_solution: str | None = None,
     preventive_action: str | None = None,
+    ai_remediation_commands: str | None = None,
+    ai_runbook: str | None = None,
 ):
     history = models.IncidentHistory(
         incident_id=incident_id,
@@ -72,6 +74,8 @@ def add_history(
         explanation=explanation,
         suggested_solution=suggested_solution,
         preventive_action=preventive_action,
+        ai_remediation_commands=ai_remediation_commands,
+        ai_runbook=ai_runbook,
     )
 
     db.add(history)
@@ -112,6 +116,9 @@ def create_incident(
             error=cleaned_data["error"],
             severity=cleaned_data["severity"],
             description=cleaned_data["description"],
+            devops_tool=incident.devops_tool,
+            environment=incident.environment or "Production",
+            service_or_cluster=incident.service_or_cluster,
             status="Open",
         )
 
@@ -122,8 +129,9 @@ def create_incident(
         # ── ML: Generate embedding + predict category (background-safe) ──
         try:
             combined_text = (
+                f"{new_incident.devops_tool or ''} {new_incident.service_or_cluster or ''} "
                 f"{cleaned_data['application']} {cleaned_data['error']} {cleaned_data['description']}"
-            )
+            ).strip()
 
             embedding = generate_embedding(combined_text)
             if embedding:
@@ -207,6 +215,8 @@ def get_incidents(
     severity: str | None = None,
     status: str | None = None,
     category: str | None = None,
+    devops_tool: str | None = None,
+    environment: str | None = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -222,6 +232,12 @@ def get_incidents(
 
     if category:
         query = query.filter(models.Incident.incident_category == category)
+
+    if devops_tool:
+        query = query.filter(models.Incident.devops_tool == devops_tool)
+
+    if environment:
+        query = query.filter(models.Incident.environment == environment)
 
     return query.order_by(models.Incident.id.desc()).offset(skip).limit(limit).all()
 
@@ -322,13 +338,16 @@ def investigate(
         logger.warning("Similar incident search failed: %s", ml_err)
         similar = []
 
-    # ── Gemini RAG Investigation ─────────────────────────────────────────
+    # ── Gemini DevOps RAG Investigation ──────────────────────────────────
     try:
         result = investigate_incident(
             application=incident.application,
             error_message=incident.error,
             description=incident.description,
             severity=incident.severity,
+            devops_tool=incident.devops_tool,
+            environment=incident.environment,
+            service_or_cluster=incident.service_or_cluster,
             similar_incidents=similar if similar else None,
         )
 
@@ -360,6 +379,10 @@ def investigate(
     incident.explanation = result["explanation"]
     incident.suggested_solution = result["suggested_solution"]
     incident.preventive_action = result["preventive_action"]
+    incident.ai_remediation_commands = result.get("remediation_commands")
+    incident.ai_runbook = result.get("runbook")
+    if not incident.devops_tool and result.get("devops_tool"):
+        incident.devops_tool = result.get("devops_tool")
     incident.ml_predicted_severity = result["severity"]
 
     # Status → Resolved (AI has analysed it; engineer can change if needed)
@@ -371,12 +394,14 @@ def investigate(
         db,
         incident.id,
         "AI Investigation Completed",
-        f"AI analysis completed by {current_user}.{rag_note}",
+        f"AI DevOps analysis completed by {current_user}.{rag_note}",
         root_cause=result["root_cause"],
         investigation_severity=result["severity"],
         explanation=result["explanation"],
         suggested_solution=result["suggested_solution"],
         preventive_action=result["preventive_action"],
+        ai_remediation_commands=result.get("remediation_commands"),
+        ai_runbook=result.get("runbook"),
     )
 
     db.commit()

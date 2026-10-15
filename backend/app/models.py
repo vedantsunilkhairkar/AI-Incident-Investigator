@@ -31,6 +31,13 @@ class Incident(Base):
     suggested_solution = Column(Text, nullable=True)
     preventive_action = Column(Text, nullable=True)
 
+    # DevOps & Infrastructure fields
+    devops_tool = Column(String, index=True, nullable=True)          # e.g. Kubernetes, Docker, AWS, Terraform, CI/CD, NGINX
+    environment = Column(String, index=True, nullable=True)          # Production, Staging, Development
+    service_or_cluster = Column(String, nullable=True)               # e.g. k8s-prod-us-east-1 / payment-service
+    ai_remediation_commands = Column(Text, nullable=True)            # Exact CLI commands (kubectl, terraform, docker, etc.)
+    ai_runbook = Column(Text, nullable=True)                         # SRE post-mortem runbook & rollback checklist
+
     # ML fields
     embedding = Column(Text, nullable=True)           # JSON-serialized vector
     ml_predicted_severity = Column(String, nullable=True)  # ML severity prediction
@@ -54,6 +61,8 @@ class IncidentHistory(Base):
     explanation = Column(Text, nullable=True)
     suggested_solution = Column(Text, nullable=True)
     preventive_action = Column(Text, nullable=True)
+    ai_remediation_commands = Column(Text, nullable=True)
+    ai_runbook = Column(Text, nullable=True)
 
     created_at = Column(
         DateTime,

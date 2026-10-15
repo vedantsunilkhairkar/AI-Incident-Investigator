@@ -20,6 +20,12 @@ interface Incident {
   explanation?: string;
   suggested_solution?: string;
   preventive_action?: string;
+  devops_tool?: string;
+  environment?: string;
+  service_or_cluster?: string;
+  incident_category?: string;
+  ai_remediation_commands?: string;
+  ai_runbook?: string;
 }
 
 const severityStyles: Record<string, string> = {
@@ -118,6 +124,8 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [devopsFilter, setDevopsFilter] = useState("All");
+  const [environmentFilter, setEnvironmentFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -238,6 +246,8 @@ export default function Dashboard() {
         incident.application.toLowerCase().includes(query) ||
         incident.error.toLowerCase().includes(query) ||
         incident.description.toLowerCase().includes(query) ||
+        (incident.devops_tool && incident.devops_tool.toLowerCase().includes(query)) ||
+        (incident.environment && incident.environment.toLowerCase().includes(query)) ||
         String(incident.id).includes(query);
 
       const matchesSeverity =
@@ -246,9 +256,15 @@ export default function Dashboard() {
       const matchesStatus =
         statusFilter === "All" || incident.status === statusFilter;
 
-      return matchesSearch && matchesSeverity && matchesStatus;
+      const matchesDevops =
+        devopsFilter === "All" || incident.devops_tool === devopsFilter;
+
+      const matchesEnv =
+        environmentFilter === "All" || incident.environment === environmentFilter;
+
+      return matchesSearch && matchesSeverity && matchesStatus && matchesDevops && matchesEnv;
     });
-  }, [incidents, search, severityFilter, statusFilter]);
+  }, [incidents, search, severityFilter, statusFilter, devopsFilter, environmentFilter]);
 
   const totalPages = Math.max(
     1,
@@ -262,7 +278,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, severityFilter, statusFilter]);
+  }, [search, severityFilter, statusFilter, devopsFilter, environmentFilter]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -274,13 +290,17 @@ export default function Dashboard() {
     setSearch("");
     setSeverityFilter("All");
     setStatusFilter("All");
+    setDevopsFilter("All");
+    setEnvironmentFilter("All");
     setCurrentPage(1);
   }
 
   const hasFilters =
     search.trim() !== "" ||
     severityFilter !== "All" ||
-    statusFilter !== "All";
+    statusFilter !== "All" ||
+    devopsFilter !== "All" ||
+    environmentFilter !== "All";
 
   return (
     <div className="min-h-screen bg-[#070b13] text-slate-100">
@@ -726,6 +746,33 @@ export default function Dashboard() {
                     <option value="Resolved">Resolved</option>
                   </select>
 
+                  <select
+                    value={devopsFilter}
+                    onChange={(event) => setDevopsFilter(event.target.value)}
+                    className="h-10 rounded-xl border border-white/[0.08] bg-[#101722] px-3 text-xs text-slate-300 outline-none focus:border-cyan-400/30 focus:ring-2 focus:ring-cyan-400/10"
+                  >
+                    <option value="All">All DevOps Tools</option>
+                    <option value="Kubernetes">☸️ Kubernetes</option>
+                    <option value="Docker">🐳 Docker</option>
+                    <option value="AWS / Cloud">☁️ AWS / Cloud</option>
+                    <option value="Terraform">🟣 Terraform</option>
+                    <option value="CI/CD">🚀 CI/CD</option>
+                    <option value="Prometheus">📊 Prometheus</option>
+                    <option value="NGINX">🌐 NGINX</option>
+                    <option value="Database">🗄️ Database</option>
+                  </select>
+
+                  <select
+                    value={environmentFilter}
+                    onChange={(event) => setEnvironmentFilter(event.target.value)}
+                    className="h-10 rounded-xl border border-white/[0.08] bg-[#101722] px-3 text-xs text-slate-300 outline-none focus:border-cyan-400/30 focus:ring-2 focus:ring-cyan-400/10"
+                  >
+                    <option value="All">All Environments</option>
+                    <option value="Production">● Production</option>
+                    <option value="Staging">● Staging</option>
+                    <option value="Development">● Development</option>
+                  </select>
+
                   {hasFilters && (
                     <button
                       onClick={resetFilters}
@@ -876,12 +923,32 @@ export default function Dashboard() {
                                 {incident.application.slice(0, 2)}
                               </div>
                               <div className="min-w-0">
-                                <p className="max-w-[150px] truncate text-sm font-medium text-slate-200">
-                                  {incident.application}
-                                </p>
-                                <p className="mt-0.5 text-[10px] text-slate-600">
-                                  Application
-                                </p>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="max-w-[150px] truncate text-sm font-medium text-slate-200">
+                                    {incident.application}
+                                  </p>
+                                  {incident.environment && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded border border-white/10 bg-white/5 text-slate-400">
+                                      {incident.environment === "Production" ? "prod" : incident.environment === "Staging" ? "stage" : "dev"}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="mt-0.5 flex items-center gap-2">
+                                  {incident.devops_tool ? (
+                                    <span className="text-[10px] font-medium text-cyan-400">
+                                      {incident.devops_tool}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-600">
+                                      Application
+                                    </span>
+                                  )}
+                                  {incident.incident_category && (
+                                    <span className="text-[10px] text-slate-500">
+                                      • {incident.incident_category}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </td>

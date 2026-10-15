@@ -64,7 +64,7 @@ AI-Incident-Investigator/
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/vedantk-04/AI-Incident-Investigator.git
+git clone https://github.com/vedantsunilkhairkar/AI-Incident-Investigator.git
 cd AI-Incident-Investigator
 ```
 

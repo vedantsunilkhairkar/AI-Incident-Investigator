@@ -488,11 +488,17 @@ export default function Dashboard() {
 
               <div>
                 <p className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-slate-600 sm:block">
-                  Operations
+                  SRE Autonomous Operations
                 </p>
-                <h1 className="text-sm font-semibold text-white sm:text-base">
-                  Incident Dashboard
-                </h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-sm font-semibold text-white sm:text-base">
+                    Incident Dashboard
+                  </h1>
+                  <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-0.5 text-[10px] font-mono text-cyan-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    Agentic SRE Engine: Active
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -954,10 +960,17 @@ export default function Dashboard() {
                           </td>
 
                           <td className="max-w-[300px] px-4 py-4">
-                            <p className="truncate text-sm text-slate-400">
-                              {incident.error}
-                            </p>
-                            <p className="mt-1 max-w-[280px] truncate text-[10px] text-slate-600">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm text-slate-300">
+                                {incident.error}
+                              </p>
+                              {incident.root_cause && (
+                                <span className="shrink-0 text-[9px] font-mono font-bold text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">
+                                  🤖 Triaged
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 max-w-[280px] truncate text-[10px] text-slate-500">
                               {incident.description}
                             </p>
                           </td>

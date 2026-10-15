@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getSimilarIncidents } from "../../../services/api";
+import {
+  getSimilarIncidents,
+  sendAgentChat,
+  executeAgentCommand,
+} from "../../../services/api";
 
 interface Incident {
   id: number;
@@ -28,6 +32,11 @@ interface Incident {
   // ML fields
   incident_category?: string | null;
   ml_predicted_severity?: string | null;
+
+  // Agentic & Generative AI fields
+  agent_thought_trace?: string | null;
+  architecture_diagram?: string | null;
+  chat_history?: string | null;
 }
 
 interface SimilarIncident {
@@ -39,6 +48,29 @@ interface SimilarIncident {
   suggested_solution?: string;
   preventive_action?: string;
   similarity_score: number;
+}
+
+interface ThoughtStep {
+  step: number;
+  phase: string;
+  tool: string;
+  command: string;
+  status: string;
+  observation: string;
+}
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  user?: string;
+}
+
+interface SandboxResult {
+  command: string;
+  output: string;
+  exit_code: number;
+  duration_ms: number;
+  risk_level: string;
 }
 
 const API_URL =
@@ -65,9 +97,26 @@ export default function IncidentDetailsPage() {
   const [investigating, setInvestigating] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [copiedCmd, setCopiedCmd] = useState(false);
 
+  // Copy state
+  const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedReport, setCopiedReport] = useState(false);
+
+  // Agent Thought Trace
+  const [thoughtSteps, setThoughtSteps] = useState<ThoughtStep[]>([]);
+  const [expandedStep, setExpandedStep] = useState<number | null>(null);
+
+  // Sandbox Command Execution State
+  const [sandboxHistory, setSandboxHistory] = useState<SandboxResult[]>([]);
+  const [executingCmd, setExecutingCmd] = useState(false);
+  const [customCmd, setCustomCmd] = useState("");
+
+  // Chat Copilot Drawer State
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
 
   // ML similar incidents state
   const [similar, setSimilar] = useState<SimilarIncident[]>([]);
@@ -95,6 +144,24 @@ export default function IncidentDetailsPage() {
       }
 
       setIncident(data);
+
+      // Parse Thought Trace
+      if (data.agent_thought_trace) {
+        try {
+          setThoughtSteps(JSON.parse(data.agent_thought_trace));
+        } catch {
+          setThoughtSteps([]);
+        }
+      }
+
+      // Parse Chat History
+      if (data.chat_history) {
+        try {
+          setChatMessages(JSON.parse(data.chat_history));
+        } catch {
+          setChatMessages([]);
+        }
+      }
 
       // Auto-trigger AI investigation if this incident has not been investigated yet
       if (!data.root_cause) {
@@ -126,9 +193,20 @@ export default function IncidentDetailsPage() {
           ai_remediation_commands: invData.remediation_commands,
           ai_runbook: invData.runbook,
           devops_tool: prev.devops_tool || invData.devops_tool,
+          agent_thought_trace: invData.agent_thought_trace,
+          architecture_diagram: invData.architecture_diagram,
           status: "Resolved",
         } : null);
-        setSuccessMessage("DevOps AI investigation completed successfully.");
+
+        if (invData.agent_thought_trace) {
+          try {
+            setThoughtSteps(JSON.parse(invData.agent_thought_trace));
+          } catch {
+            setThoughtSteps([]);
+          }
+        }
+
+        setSuccessMessage("DevOps & SRE Autonomous Agent investigation completed.");
         fetchSimilar();
       }
     } catch (e) {
@@ -143,9 +221,11 @@ export default function IncidentDetailsPage() {
     setSimilarLoading(true);
     try {
       const data = await getSimilarIncidents(Number(incidentId));
-      setSimilar(data.similar || []);
-    } catch {
-      setSimilar([]);
+      if (data?.similar) {
+        setSimilar(data.similar);
+      }
+    } catch (err) {
+      console.warn("Could not load similar incidents:", err);
     } finally {
       setSimilarLoading(false);
     }
@@ -158,35 +238,58 @@ export default function IncidentDetailsPage() {
     }
   }, [incidentId]);
 
+  useEffect(() => {
+    if (isChatOpen) {
+      chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, isChatOpen]);
+
   const handleReinvestigate = async () => {
+    const token = localStorage.getItem("token") || localStorage.getItem("access_token");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    setInvestigating(true);
+    setError("");
+    setSuccessMessage("");
+
     try {
-      const token = localStorage.getItem("token") || localStorage.getItem("access_token");
-
-      if (!token) {
-        window.location.href = "/login";
-        return;
-      }
-
-      setInvestigating(true);
-      setError("");
-      setSuccessMessage("");
-
-      const response = await fetch(
-        `${API_URL}/incidents/${incidentId}/investigate`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const response = await fetch(`${API_URL}/incidents/${incidentId}/investigate`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.detail || "AI investigation failed.");
       }
 
-      setSuccessMessage("DevOps AI investigation completed successfully.");
-      await fetchIncident();
+      setIncident((prev) => prev ? {
+        ...prev,
+        root_cause: data.root_cause,
+        investigation_severity: data.severity,
+        explanation: data.explanation,
+        suggested_solution: data.suggested_solution,
+        preventive_action: data.preventive_action,
+        ai_remediation_commands: data.remediation_commands,
+        ai_runbook: data.runbook,
+        devops_tool: prev.devops_tool || data.devops_tool,
+        agent_thought_trace: data.agent_thought_trace,
+        architecture_diagram: data.architecture_diagram,
+        status: "Resolved",
+      } : null);
+
+      if (data.agent_thought_trace) {
+        try {
+          setThoughtSteps(JSON.parse(data.agent_thought_trace));
+        } catch {
+          setThoughtSteps([]);
+        }
+      }
+
+      setSuccessMessage("DevOps & SRE Autonomous Agent re-investigation finished.");
       await fetchSimilar();
     } catch (err: any) {
       setError(err?.message || "AI investigation failed.");
@@ -235,7 +338,7 @@ ${incident.ai_runbook || "N/A"}
 ${incident.preventive_action || "N/A"}
 
 ---
-*Report generated by AI Incident Investigator Copilot*
+*Report generated by AI Incident Investigator Autonomous Copilot*
 `;
 
     navigator.clipboard.writeText(report);
@@ -248,6 +351,69 @@ ${incident.preventive_action || "N/A"}
       navigator.clipboard.writeText(incident.ai_remediation_commands);
       setCopiedCmd(true);
       setTimeout(() => setCopiedCmd(false), 2000);
+    }
+  };
+
+  // Safe Sandbox Execution
+  const handleExecuteSandboxCommand = async (cmdToRun: string) => {
+    if (!cmdToRun.trim() || executingCmd) return;
+    setExecutingCmd(true);
+    try {
+      const res = await executeAgentCommand(Number(incidentId), cmdToRun.trim());
+      setSandboxHistory((prev) => [...prev, res]);
+      setCustomCmd("");
+    } catch (err: any) {
+      setSandboxHistory((prev) => [
+        ...prev,
+        {
+          command: cmdToRun,
+          output: `Error executing command: ${err.message}`,
+          exit_code: 1,
+          duration_ms: 50,
+          risk_level: "ERROR",
+        },
+      ]);
+    } finally {
+      setExecutingCmd(false);
+    }
+  };
+
+  // Execute all commands from remediation block
+  const handleExecuteAllRemediations = async () => {
+    if (!incident?.ai_remediation_commands) return;
+    const lines = incident.ai_remediation_commands
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#"));
+
+    for (const cmd of lines) {
+      await handleExecuteSandboxCommand(cmd);
+    }
+  };
+
+  // Send message to SRE Copilot
+  const handleSendChat = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!chatInput.trim() || chatSending) return;
+
+    const userMsg = chatInput.trim();
+    setChatInput("");
+    setChatMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+    setChatSending(true);
+
+    try {
+      const res = await sendAgentChat(Number(incidentId), userMsg);
+      setChatMessages((prev) => [...prev, { role: "assistant", content: res.reply }]);
+    } catch (err: any) {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `⚠️ Failed to reach SRE Copilot: ${err.message}`,
+        },
+      ]);
+    } finally {
+      setChatSending(false);
     }
   };
 
@@ -289,11 +455,11 @@ ${incident.preventive_action || "N/A"}
     return (
       <div className="min-h-screen bg-[#070b14] text-white flex items-center justify-center px-6">
         <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-[#0c1220] p-8 text-center shadow-2xl">
-          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-500/10 border border-blue-500/20">
-            <div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-700 border-t-blue-500" />
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-500/10 border border-cyan-500/30">
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-700 border-t-cyan-400" />
           </div>
-          <h2 className="text-lg font-semibold">Loading incident</h2>
-          <p className="mt-2 text-sm text-slate-500">Retrieving telemetry & ML data...</p>
+          <h2 className="text-lg font-semibold tracking-wide text-cyan-200">Initializing SRE Copilot</h2>
+          <p className="mt-2 text-sm text-slate-500">Connecting to telemetry stream and vector memory...</p>
         </div>
       </div>
     );
@@ -310,7 +476,7 @@ ${incident.preventive_action || "N/A"}
           <p className="mt-3 text-sm leading-6 text-red-300">{error}</p>
           <button
             onClick={() => router.push("/")}
-            className="mt-7 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold transition hover:bg-blue-500"
+            className="mt-7 rounded-xl bg-cyan-600 px-5 py-3 text-sm font-semibold transition hover:bg-cyan-500"
           >
             Return to Dashboard
           </button>
@@ -322,132 +488,150 @@ ${incident.preventive_action || "N/A"}
   if (!incident) return null;
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-white">
-      {/* Background accents */}
+    <div className="min-h-screen bg-[#060a12] text-white selection:bg-cyan-500/30">
+      {/* Background cyber ambient gradients */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-40 top-20 h-96 w-96 rounded-full bg-blue-600/5 blur-3xl" />
-        <div className="absolute -right-40 bottom-20 h-96 w-96 rounded-full bg-purple-600/5 blur-3xl" />
+        <div className="absolute -left-48 top-10 h-[500px] w-[500px] rounded-full bg-cyan-500/5 blur-[120px]" />
+        <div className="absolute right-0 top-1/3 h-[500px] w-[500px] rounded-full bg-indigo-500/5 blur-[120px]" />
+        <div className="absolute bottom-10 left-1/3 h-[400px] w-[400px] rounded-full bg-purple-500/5 blur-[120px]" />
       </div>
 
-      {/* Header */}
-      <header className="relative border-b border-slate-800/80 bg-[#070b14]/95 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+      {/* Top Navigation & Status Bar */}
+      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-[#060a12]/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div>
-            <button
-              onClick={() => router.push("/")}
-              className="mb-4 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
-            >
-              <span>←</span> Back to Dashboard
-            </button>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push("/")}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-cyan-300 transition"
+              >
+                <span>←</span> Back to Dashboard
+              </button>
+
+              <span className="text-slate-600">|</span>
+
+              {/* Live Autonomous Agent Status Pill */}
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-0.5 text-xs font-medium text-emerald-300">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span>SRE Autonomous Agent: Active</span>
+              </div>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl text-white">
                 Incident #{incident.id}
               </h1>
 
-              {/* DevOps Tool Badge */}
               {incident.devops_tool && (
-                <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-300 flex items-center gap-1.5">
+                <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-300 flex items-center gap-1.5 shadow-sm shadow-cyan-950">
                   <span>{DEVOPS_ICONS[incident.devops_tool] || "⚙️"}</span>
                   <span>{incident.devops_tool}</span>
                 </span>
               )}
 
-              {/* Environment Badge */}
               {incident.environment && (
                 <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${getEnvStyle(incident.environment)}`}>
                   ● {incident.environment}
                 </span>
               )}
 
-              {/* ML: Category badge */}
               {incident.incident_category && (
                 <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-300">
-                  🏷 {incident.incident_category}
+                  🏷️ {incident.incident_category}
                 </span>
               )}
             </div>
-
-            {incident.service_or_cluster && (
-              <p className="mt-2 text-xs font-mono text-slate-400">
-                Target: <span className="text-indigo-300">{incident.service_or_cluster}</span>
-              </p>
-            )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {/* Open SRE Chat Drawer */}
+            <button
+              onClick={() => setIsChatOpen(!isChatOpen)}
+              className="inline-flex items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 px-3.5 py-2 text-xs font-bold text-violet-300 transition shadow-sm"
+              title="Open real-time interactive SRE Copilot assistant"
+            >
+              <span>💬</span>
+              <span>Ask SRE Copilot</span>
+            </button>
+
+            {/* Copy Post-Mortem */}
             {incident.root_cause && (
               <button
                 onClick={handleCopyPostMortem}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/90 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-sm transition hover:bg-slate-700 hover:text-white"
-                title="Copy complete SRE Post-Mortem report formatted in Markdown"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/90 hover:bg-slate-700 px-3.5 py-2 text-xs font-bold text-slate-200 transition shadow-sm"
+                title="Export complete SRE Post-Mortem in Markdown"
               >
                 <span>{copiedReport ? "✓" : "📋"}</span>
                 <span>{copiedReport ? "Copied Post-Mortem!" : "Copy Post-Mortem"}</span>
               </button>
             )}
 
+            {/* Re-Run Autonomous Agent */}
             <button
               onClick={handleReinvestigate}
               disabled={investigating}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-500/30 bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-2.5 text-sm font-semibold shadow-lg shadow-indigo-900/30 transition hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-cyan-900/40 transition hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50"
             >
               {investigating ? (
                 <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  AI Investigating...
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  Agent Triaging...
                 </>
               ) : (
                 <>
-                  <span>🤖</span>
-                  {incident.root_cause ? "Re-Run SRE Copilot" : "Investigate with AI"}
+                  <span>⚡</span>
+                  {incident.root_cause ? "Re-Run Autonomous Agent" : "Run Autonomous Agent"}
                 </>
               )}
             </button>
 
             <button
               onClick={() => router.push("/incidents/new")}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold transition hover:bg-slate-700"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-xs font-semibold hover:bg-slate-700 transition"
             >
-              <span>+</span> New Incident
+              <span>+</span> New
             </button>
           </div>
         </div>
       </header>
 
-      <main className="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        {/* Alerts */}
+      <main className="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 space-y-6">
+        {/* Success Alert */}
         {successMessage && (
-          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-4">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-sm text-emerald-400">✓</div>
+          <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs text-emerald-400 font-bold">✓</div>
             <div>
-              <p className="font-medium text-emerald-300">Investigation Completed</p>
-              <p className="mt-1 text-sm text-emerald-400/80">{successMessage}</p>
+              <p className="font-semibold text-emerald-300 text-sm">{successMessage}</p>
             </div>
           </div>
         )}
 
-        {error && (
-          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-sm text-red-400">!</div>
-            <div>
-              <p className="font-medium text-red-300">Something went wrong</p>
-              <p className="mt-1 text-sm text-red-400/80">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Summary card */}
-        <section className="mb-6 overflow-hidden rounded-3xl border border-slate-800/80 bg-[#0c1220] shadow-2xl">
+        {/* ═══ 1. INCIDENT TELEMETRY SUMMARY CARD ═══ */}
+        <section className="overflow-hidden rounded-3xl border border-slate-800/90 bg-[#0a101d] shadow-2xl">
           <div className="p-5 sm:p-7">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Service / Application</span>
-                </div>
-                <h2 className="break-words text-2xl font-bold sm:text-3xl text-white">{incident.application}</h2>
-                <div className="mt-4 flex items-start gap-3">
-                  <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-400 shadow-lg shadow-amber-500/30" />
-                  <p className="break-words font-mono text-sm leading-6 text-amber-300/90">{incident.error}</p>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Target Service / Component
+                </span>
+                <h2 className="text-2xl font-bold sm:text-3xl text-white mt-1">
+                  {incident.application}
+                </h2>
+                {incident.service_or_cluster && (
+                  <p className="mt-1 font-mono text-xs text-cyan-300">
+                    Cluster / Target: <span className="text-slate-300">{incident.service_or_cluster}</span>
+                  </p>
+                )}
+
+                <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5">
+                  <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-400 shadow-md shadow-amber-500/50" />
+                  <p className="break-words font-mono text-xs leading-6 text-amber-300">
+                    {incident.error}
+                  </p>
                 </div>
               </div>
 
@@ -462,80 +646,289 @@ ${incident.preventive_action || "N/A"}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 border-t border-slate-800/80">
+          <div className="grid grid-cols-2 sm:grid-cols-4 border-t border-slate-800/80 bg-[#080d18]">
             <div className="border-r border-b sm:border-b-0 border-slate-800/80 p-4">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">DevOps Tool</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">DevOps Tool</p>
               <p className="mt-1 font-semibold text-slate-200 text-sm">{incident.devops_tool || "General"}</p>
             </div>
             <div className="border-b sm:border-b-0 sm:border-r border-slate-800/80 p-4">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Environment</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Environment</p>
               <p className="mt-1 font-semibold text-slate-200 text-sm">{incident.environment || "Production"}</p>
             </div>
             <div className="border-r border-slate-800/80 p-4">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Severity</p>
-              <p className="mt-1 font-semibold text-slate-200 text-sm">{incident.severity}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Impact Classification</p>
+              <p className="mt-1 font-semibold text-cyan-300 text-sm">{incident.investigation_severity || incident.severity}</p>
             </div>
             <div className="p-4">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Status</p>
-              <p className="mt-1 font-semibold text-slate-200 text-sm">{incident.status}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Resolution State</p>
+              <p className="mt-1 font-semibold text-emerald-400 text-sm">{incident.status}</p>
             </div>
           </div>
         </section>
 
-        {/* Context / Telemetry description */}
-        <section className="mb-6 rounded-3xl border border-slate-800/80 bg-[#0c1220] p-5 shadow-xl sm:p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-semibold text-white flex items-center gap-2">
-              <span>📋</span> Observed Telemetry & Incident Description
-            </h3>
-          </div>
-          <div className="rounded-2xl border border-slate-800 bg-[#080d18] p-5">
-            <p className="whitespace-pre-wrap font-mono text-xs leading-7 text-slate-300">
-              {incident.description || "No description was provided for this incident."}
-            </p>
-          </div>
-        </section>
-
-        {/* ═══ SRE CLI REMEDIATION COMMANDS TERMINAL (NEW) ═══ */}
-        {incident.ai_remediation_commands && (
-          <section className="mb-6 overflow-hidden rounded-3xl border border-cyan-500/30 bg-[#080d18] shadow-2xl">
-            {/* Terminal Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 bg-[#0d1526] px-5 py-3.5">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-3 w-3 rounded-full bg-red-500/80 inline-block" />
-                  <span className="h-3 w-3 rounded-full bg-yellow-500/80 inline-block" />
-                  <span className="h-3 w-3 rounded-full bg-emerald-500/80 inline-block" />
+        {/* ═══ 2. AGENTIC MULTI-STEP REASONING TIMELINE (OODA LOOP) ═══ */}
+        {thoughtSteps.length > 0 && (
+          <section className="overflow-hidden rounded-3xl border border-cyan-500/30 bg-[#091122] shadow-2xl">
+            <div className="border-b border-slate-800 bg-gradient-to-r from-cyan-950/40 via-blue-950/20 to-transparent px-6 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300">
+                    🧠
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-cyan-200 uppercase tracking-wide">
+                      Autonomous SRE Agent Execution Trace (ReAct Engine)
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Multi-phase OODA loop: Telemetry Mining → Diagnostic Tooling → Metrics Probe → Blast Radius Audit
+                    </p>
+                  </div>
                 </div>
-                <span className="text-xs font-mono font-bold text-slate-400">
-                  terminal — remediation-commands.sh ({incident.devops_tool || "DevOps"})
+
+                <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[11px] font-mono text-cyan-300">
+                  {thoughtSteps.length} Steps Executed
                 </span>
               </div>
-
-              <button
-                type="button"
-                onClick={handleCopyCommands}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-xs font-bold text-cyan-300 transition"
-              >
-                <span>{copiedCmd ? "✓" : "📋"}</span>
-                <span>{copiedCmd ? "Copied to Clipboard!" : "Copy CLI Commands"}</span>
-              </button>
             </div>
 
-            {/* Terminal Body */}
-            <div className="p-5 overflow-x-auto">
-              <pre className="font-mono text-xs leading-6 text-cyan-300 whitespace-pre-wrap">
-                {incident.ai_remediation_commands}
-              </pre>
+            <div className="p-5 sm:p-6 space-y-3">
+              {thoughtSteps.map((step) => {
+                const isExpanded = expandedStep === step.step;
+                return (
+                  <div
+                    key={step.step}
+                    className="overflow-hidden rounded-2xl border border-slate-800 bg-[#060c18] transition hover:border-cyan-500/30"
+                  >
+                    <div
+                      onClick={() => setExpandedStep(isExpanded ? null : step.step)}
+                      className="flex cursor-pointer items-center justify-between gap-4 p-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/10 border border-cyan-500/30 text-xs font-mono font-bold text-cyan-300">
+                          {step.step}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white">{step.phase}</span>
+                            <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-mono text-slate-400">
+                              {step.tool}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-xs font-mono text-cyan-400/80 truncate max-w-md sm:max-w-xl">
+                            $ {step.command}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                          ✓ {step.status}
+                        </span>
+                        <span className="text-xs text-slate-500">{isExpanded ? "▲" : "▼"}</span>
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="border-t border-slate-800/80 bg-slate-950/60 p-4">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Observation Telemetry</p>
+                        <p className="font-mono text-xs leading-6 text-slate-300 bg-[#040810] p-3 rounded-xl border border-slate-800">
+                          {step.observation}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </section>
         )}
 
-        {/* ═══ SRE POST-MORTEM RUNBOOK & ROLLBACK STRATEGY (NEW) ═══ */}
+        {/* ═══ 3. VISUAL FAILURE ARCHITECTURE TOPOLOGY (GENERATIVE AI) ═══ */}
+        <section className="overflow-hidden rounded-3xl border border-indigo-500/25 bg-[#091020] shadow-2xl">
+          <div className="border-b border-slate-800 bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-transparent px-6 py-4">
+            <h3 className="text-sm font-bold text-indigo-200 uppercase tracking-wide flex items-center gap-2">
+              <span>🗺️</span> Failure Topology & Blast Radius Map
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Live visual system flow showing user ingress, dependent services, and the failing component
+            </p>
+          </div>
+
+          <div className="p-6">
+            {/* Visual Node Flow */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+              {/* Ingress Node */}
+              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-center">
+                <span className="text-2xl">🌐</span>
+                <p className="mt-2 text-xs font-bold text-emerald-300">Client / Gateway</p>
+                <span className="mt-1 inline-block text-[10px] text-emerald-400 font-mono">200 OK Ingress</span>
+              </div>
+
+              {/* Proxy / Ingress */}
+              <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 text-center">
+                <span className="text-2xl">🚪</span>
+                <p className="mt-2 text-xs font-bold text-blue-300">
+                  {incident.devops_tool === "NGINX" ? "NGINX Reverse Proxy" : "ALB / K8s Ingress"}
+                </p>
+                <span className="mt-1 inline-block text-[10px] text-blue-400 font-mono">Routing Traffic</span>
+              </div>
+
+              {/* Failing Node (Pulsating Hazard) */}
+              <div className="relative rounded-2xl border-2 border-red-500/60 bg-red-500/10 p-4 text-center shadow-lg shadow-red-950 animate-pulse">
+                <span className="absolute -top-2.5 -right-2.5 rounded-full bg-red-600 px-2 py-0.5 text-[9px] font-bold text-white uppercase tracking-wider">
+                  Failing
+                </span>
+                <span className="text-2xl">💥</span>
+                <p className="mt-2 text-xs font-bold text-red-200">{incident.application}</p>
+                <span className="mt-1 inline-block text-[10px] text-red-400 font-mono">
+                  {incident.root_cause ? incident.root_cause.slice(0, 32) + "..." : "Error Triggered"}
+                </span>
+              </div>
+
+              {/* Data Store */}
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4 text-center">
+                <span className="text-2xl">🗄️</span>
+                <p className="mt-2 text-xs font-bold text-slate-300">Data Store / State</p>
+                <span className="mt-1 inline-block text-[10px] text-slate-400 font-mono">PostgreSQL / S3</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ═══ 4. INTERACTIVE SRE TERMINAL & SAFE SANDBOX RUNNER ═══ */}
+        {incident.ai_remediation_commands && (
+          <section className="overflow-hidden rounded-3xl border border-cyan-500/40 bg-[#050914] shadow-2xl">
+            {/* Terminal Top Window Bar */}
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-800 bg-[#09101f] px-5 py-3.5 gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-3 w-3 rounded-full bg-red-500/90 inline-block shadow-sm shadow-red-500/50" />
+                  <span className="h-3 w-3 rounded-full bg-yellow-500/90 inline-block shadow-sm shadow-yellow-500/50" />
+                  <span className="h-3 w-3 rounded-full bg-emerald-500/90 inline-block shadow-sm shadow-emerald-500/50" />
+                </div>
+                <span className="text-xs font-mono font-bold text-slate-300 flex items-center gap-1.5">
+                  <span>sre-copilot@k8s-prod:~$</span>
+                  <span className="text-cyan-400">remediation-sandbox.sh</span>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyCommands}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/90 hover:bg-slate-700 text-xs font-bold text-slate-200 transition"
+                >
+                  <span>{copiedCmd ? "✓" : "📋"}</span>
+                  <span>{copiedCmd ? "Copied" : "Copy All"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExecuteAllRemediations}
+                  disabled={executingCmd}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-cyan-500/40 bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-xs font-bold text-white transition shadow-md shadow-cyan-950 disabled:opacity-50"
+                >
+                  <span>⚡</span>
+                  <span>{executingCmd ? "Running in Sandbox..." : "Run in Sandbox"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Terminal Commands Display */}
+            <div className="p-5 border-b border-slate-800/80 bg-[#040711]">
+              <p className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+                # SRE Remediation Commands (Click any command to run in sandbox):
+              </p>
+              <div className="space-y-1">
+                {incident.ai_remediation_commands.split("\n").map((line, idx) => {
+                  const isComment = line.trim().startsWith("#");
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex items-start justify-between group py-0.5 px-2 rounded hover:bg-slate-800/40 font-mono text-xs leading-6 ${
+                        isComment ? "text-slate-500" : "text-cyan-300 cursor-pointer"
+                      }`}
+                      onClick={() => !isComment && handleExecuteSandboxCommand(line)}
+                    >
+                      <span className="break-all">{line}</span>
+                      {!isComment && (
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30 transition shrink-0 ml-2"
+                        >
+                          Execute ⚡
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Sandbox Execution Output Console */}
+            {sandboxHistory.length > 0 && (
+              <div className="p-5 bg-[#02050b] border-t border-slate-800">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-bold flex items-center gap-1.5">
+                    <span>🟢</span> Live Sandbox Output ({sandboxHistory.length} runs)
+                  </span>
+                  <button
+                    onClick={() => setSandboxHistory([])}
+                    className="text-[10px] text-slate-500 hover:text-slate-300 underline"
+                  >
+                    Clear Terminal
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {sandboxHistory.map((item, i) => (
+                    <div key={i} className="rounded-xl border border-slate-800/90 bg-[#060a14] p-3.5 font-mono text-xs">
+                      <div className="flex items-center justify-between border-b border-slate-800/60 pb-2 mb-2 text-[11px]">
+                        <span className="text-cyan-400 font-bold">$ {item.command}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            item.exit_code === 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                          }`}>
+                            Exit {item.exit_code}
+                          </span>
+                          <span className="text-slate-500 text-[10px]">{item.duration_ms}ms</span>
+                        </div>
+                      </div>
+                      <pre className="whitespace-pre-wrap text-slate-300 text-[11px] leading-5">
+                        {item.output}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Command Input Bar */}
+            <div className="p-3 bg-[#080d1a] border-t border-slate-800 flex items-center gap-2">
+              <span className="text-cyan-400 font-mono text-xs pl-2">$</span>
+              <input
+                type="text"
+                value={customCmd}
+                onChange={(e) => setCustomCmd(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleExecuteSandboxCommand(customCmd)}
+                placeholder="Type custom kubectl, docker, or aws command to run in safe sandbox..."
+                className="flex-1 bg-transparent text-xs font-mono text-white placeholder-slate-500 focus:outline-none"
+              />
+              <button
+                onClick={() => handleExecuteSandboxCommand(customCmd)}
+                disabled={!customCmd.trim() || executingCmd}
+                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold disabled:opacity-40 transition"
+              >
+                Execute
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ═══ 5. SRE POST-MORTEM RUNBOOK CARD ═══ */}
         {incident.ai_runbook && (
-          <section className="mb-6 overflow-hidden rounded-3xl border border-purple-500/25 bg-[#0c1220] shadow-2xl">
-            <div className="border-b border-slate-800 bg-gradient-to-r from-purple-950/30 to-indigo-950/20 px-6 py-4">
-              <h3 className="text-base font-bold text-purple-200 flex items-center gap-2">
+          <section className="overflow-hidden rounded-3xl border border-purple-500/25 bg-[#0a101f] shadow-2xl">
+            <div className="border-b border-slate-800 bg-gradient-to-r from-purple-950/40 to-indigo-950/20 px-6 py-4">
+              <h3 className="text-sm font-bold text-purple-200 uppercase tracking-wide flex items-center gap-2">
                 <span>🛡️</span> SRE Post-Mortem Runbook & Verification Checklist
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -543,7 +936,7 @@ ${incident.preventive_action || "N/A"}
               </p>
             </div>
             <div className="p-6">
-              <div className="rounded-2xl border border-slate-800 bg-[#080d18] p-5">
+              <div className="rounded-2xl border border-slate-800 bg-[#060a14] p-5">
                 <p className="whitespace-pre-wrap text-sm leading-7 text-slate-200">
                   {incident.ai_runbook}
                 </p>
@@ -552,47 +945,45 @@ ${incident.preventive_action || "N/A"}
           </section>
         )}
 
-        {/* ═══ AI Investigation Core Cards ═══ */}
-        <section className="mb-6 overflow-hidden rounded-3xl border border-blue-500/20 bg-[#0c1220] shadow-2xl">
-          {/* Header */}
-          <div className="border-b border-slate-800/80 bg-gradient-to-r from-blue-500/5 via-transparent to-purple-500/5 p-5 sm:p-7">
+        {/* ═══ 6. AI ROOT CAUSE & TECHNICAL ANALYSIS CARDS ═══ */}
+        <section className="overflow-hidden rounded-3xl border border-blue-500/20 bg-[#0a101f] shadow-2xl">
+          <div className="border-b border-slate-800/80 bg-gradient-to-r from-blue-500/10 via-transparent to-purple-500/10 p-5 sm:p-7">
             <div className="flex items-center gap-4">
-              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-xl font-bold">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-blue-500/30 bg-blue-500/10 text-xl font-bold">
                 🤖
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-lg font-bold sm:text-xl">AI Root Cause & Architecture Analysis</h3>
                   <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-blue-300">
-                    {similar.length > 0 ? `RAG · ${similar.length} Historical Matches` : "Gemini Copilot"}
+                    {similar.length > 0 ? `RAG · ${similar.length} Historical Matches` : "Gemini SRE Copilot"}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-slate-400">
                   Comprehensive systems diagnosis generated for this incident
                 </p>
               </div>
             </div>
           </div>
 
-          {/* AI Content */}
           <div className="p-5 sm:p-7 space-y-6">
             {/* Root Cause */}
             <div>
-              <div className="mb-3">
+              <div className="mb-2">
                 <h4 className="text-sm font-bold text-blue-300">Root Cause Diagnosis</h4>
-                <p className="mt-0.5 text-xs text-slate-500">Identified underlying failure trigger</p>
+                <p className="text-xs text-slate-500">Identified underlying failure trigger</p>
               </div>
-              <div className="rounded-2xl border border-blue-500/10 bg-blue-500/[0.03] p-5">
-                <p className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-200 font-medium">
-                  {incident.root_cause || "Investigation has not been completed yet. Click 'Investigate with AI' above."}
+              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.04] p-5">
+                <p className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-100 font-medium">
+                  {incident.root_cause || "Investigation has not been completed yet."}
                 </p>
               </div>
             </div>
 
             {/* Explanation */}
             <div>
-              <h4 className="mb-3 text-sm font-bold text-blue-300">Technical Explanation</h4>
-              <div className="rounded-2xl border border-slate-800 bg-[#080d18] p-5">
+              <h4 className="mb-2 text-sm font-bold text-blue-300">Technical Explanation</h4>
+              <div className="rounded-2xl border border-slate-800 bg-[#060a14] p-5">
                 <p className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-300">
                   {incident.explanation || "No AI explanation available yet."}
                 </p>
@@ -601,9 +992,9 @@ ${incident.preventive_action || "N/A"}
 
             {/* Suggested Solution & Preventive Action */}
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-              <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.025] p-5">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-sm text-emerald-400">✓</div>
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.03] p-5">
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-sm text-emerald-400 font-bold">✓</div>
                   <div>
                     <h4 className="text-sm font-bold text-emerald-300">Suggested Solution</h4>
                     <p className="text-xs text-slate-500">Recommended technical remediation</p>
@@ -614,9 +1005,9 @@ ${incident.preventive_action || "N/A"}
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-purple-500/15 bg-purple-500/[0.025] p-5">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/10 text-sm text-purple-400">+</div>
+              <div className="rounded-2xl border border-purple-500/20 bg-purple-500/[0.03] p-5">
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-500/10 text-sm text-purple-400 font-bold">+</div>
                   <div>
                     <h4 className="text-sm font-bold text-purple-300">Preventive Action</h4>
                     <p className="text-xs text-slate-500">Long-term architectural guardrails</p>
@@ -630,9 +1021,9 @@ ${incident.preventive_action || "N/A"}
           </div>
         </section>
 
-        {/* ═══ ML: Similar Past Incidents ═══ */}
-        <section className="mb-6 overflow-hidden rounded-3xl border border-violet-500/20 bg-[#0c1220] shadow-2xl">
-          <div className="border-b border-slate-800/80 bg-gradient-to-r from-violet-500/5 via-transparent to-purple-500/5 p-5 sm:p-7">
+        {/* ═══ 7. ML SIMILAR PAST INCIDENTS ═══ */}
+        <section className="overflow-hidden rounded-3xl border border-violet-500/20 bg-[#0a101f] shadow-2xl">
+          <div className="border-b border-slate-800/80 bg-gradient-to-r from-violet-500/10 via-transparent to-purple-500/10 p-5 sm:p-7">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-violet-500/20 bg-violet-500/10 text-xl">
                 🔍
@@ -641,11 +1032,11 @@ ${incident.preventive_action || "N/A"}
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-lg font-bold sm:text-xl">Similar Past Incidents</h3>
                   <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-violet-300">
-                    ML Embeddings
+                    ML Embeddings RAG
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-slate-500">
-                  Past resolved incidents from your organization that closely match this one
+                <p className="mt-1 text-sm text-slate-400">
+                  Past resolved incidents from your organization that closely match this telemetry
                 </p>
               </div>
             </div>
@@ -655,14 +1046,14 @@ ${incident.preventive_action || "N/A"}
             {similarLoading ? (
               <div className="flex items-center gap-3 py-6 text-slate-500">
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-700 border-t-violet-400" />
-                <span className="text-sm">Searching for similar incidents using ML...</span>
+                <span className="text-sm">Searching vector embeddings...</span>
               </div>
             ) : similar.length === 0 ? (
-              <div className="rounded-2xl border border-slate-800 bg-[#080d18] p-6 text-center">
+              <div className="rounded-2xl border border-slate-800 bg-[#060a14] p-6 text-center">
                 <p className="text-sm text-slate-500">
                   No similar past incidents found yet.{" "}
                   <span className="text-slate-400">
-                    As more incidents are resolved, this section will automatically surface verified fixes and CLI commands.
+                    As incidents are resolved, this section will automatically surface verified fixes.
                   </span>
                 </p>
               </div>
@@ -671,9 +1062,8 @@ ${incident.preventive_action || "N/A"}
                 {similar.map((s) => (
                   <div
                     key={s.id}
-                    className="overflow-hidden rounded-2xl border border-slate-800 bg-[#080d18] transition hover:border-violet-500/30"
+                    className="overflow-hidden rounded-2xl border border-slate-800 bg-[#060a14] transition hover:border-violet-500/30"
                   >
-                    {/* Card header */}
                     <div
                       className="flex cursor-pointer items-center justify-between gap-4 p-4"
                       onClick={() => setExpandedSimilar(expandedSimilar === s.id ? null : s.id)}
@@ -699,9 +1089,8 @@ ${incident.preventive_action || "N/A"}
                       </div>
                     </div>
 
-                    {/* Expandable fix content */}
                     {expandedSimilar === s.id && (
-                      <div className="border-t border-slate-800/80 bg-slate-900/30 p-4 space-y-3">
+                      <div className="border-t border-slate-800/80 bg-slate-900/40 p-4 space-y-3">
                         {s.root_cause && (
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Past Root Cause</p>
@@ -729,22 +1118,139 @@ ${incident.preventive_action || "N/A"}
           </div>
         </section>
 
-        {/* Bottom actions */}
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
+        {/* Bottom Actions */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between pt-4">
           <button
             onClick={() => router.push("/")}
-            className="rounded-xl border border-slate-800 bg-[#0c1220] px-5 py-3 text-sm font-medium text-slate-300 transition hover:border-slate-700 hover:bg-slate-800/50 hover:text-white"
+            className="rounded-xl border border-slate-800 bg-[#0a101f] px-5 py-3 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
           >
             ← Back to Dashboard
           </button>
           <button
             onClick={() => router.push("/incidents/new")}
-            className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold transition hover:bg-blue-500"
+            className="rounded-xl bg-cyan-600 px-5 py-3 text-sm font-semibold transition hover:bg-cyan-500"
           >
             + Create Another Incident
           </button>
         </div>
       </main>
+
+      {/* ═══ 8. INTERACTIVE SLIDE-OVER SRE COPILOT CHAT DRAWER ═══ */}
+      {isChatOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-sm flex justify-end">
+          <div className="w-full max-w-lg bg-[#070c18] border-l border-slate-800 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+            {/* Chat Drawer Header */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-[#0b1326]">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/20 border border-violet-500/40 text-violet-300">
+                  🤖
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">SRE Copilot Assistant</h3>
+                  <p className="text-[11px] text-slate-400">Context: Incident #{incident.id} ({incident.application})</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="text-slate-400 hover:text-white text-lg font-bold px-2 py-1 rounded"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Suggestion Pills */}
+            <div className="p-3 bg-[#050812] border-b border-slate-800/80 flex flex-wrap gap-1.5">
+              {[
+                "What is the blast radius?",
+                "Give me a rollback command",
+                "How do I verify the fix?",
+                "Will this cause downtime?",
+              ].map((suggestion, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setChatInput(suggestion);
+                  }}
+                  className="text-[11px] bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-full border border-slate-700/60 transition"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+
+            {/* Chat Messages Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {chatMessages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
+                  <span className="text-3xl mb-2">💬</span>
+                  <p className="text-sm font-semibold text-slate-400">Ask the SRE Copilot anything</p>
+                  <p className="text-xs text-slate-500 mt-1 max-w-xs">
+                    Get real-time answers about Kubernetes pods, blast radius, rollback steps, or command verification.
+                  </p>
+                </div>
+              ) : (
+                chatMessages.map((msg, idx) => {
+                  const isUser = msg.role === "user";
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-2xl p-3.5 text-xs leading-5 ${
+                          isUser
+                            ? "bg-cyan-600 text-white rounded-br-none"
+                            : "bg-[#0d162d] border border-slate-800 text-slate-200 rounded-bl-none font-sans"
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              {chatSending && (
+                <div className="flex justify-start">
+                  <div className="bg-[#0d162d] border border-slate-800 rounded-2xl rounded-bl-none p-3 flex items-center gap-2 text-xs text-slate-400">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-cyan-400" />
+                    <span>SRE Copilot thinking...</span>
+                  </div>
+                </div>
+              )}
+              <div ref={chatBottomRef} />
+            </div>
+
+            {/* Chat Input */}
+            <form onSubmit={handleSendChat} className="p-3 border-t border-slate-800 bg-[#0b1326] flex items-center gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask SRE Copilot about this incident..."
+                className="flex-1 rounded-xl border border-slate-700 bg-[#060a14] px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={!chatInput.trim() || chatSending}
+                className="rounded-xl bg-cyan-600 hover:bg-cyan-500 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition"
+              >
+                Send
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Floating SRE Copilot Trigger Button */}
+      {!isChatOpen && (
+        <button
+          onClick={() => setIsChatOpen(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-2xl border border-cyan-500/40 bg-gradient-to-r from-cyan-600 to-indigo-600 px-4 py-3 text-xs font-bold text-white shadow-2xl shadow-cyan-900/60 hover:scale-105 transition"
+        >
+          <span className="text-base">💬</span>
+          <span>Ask SRE Copilot</span>
+        </button>
+      )}
     </div>
   );
 }

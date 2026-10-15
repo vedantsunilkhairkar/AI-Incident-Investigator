@@ -99,6 +99,9 @@ export interface Incident {
   ml_predicted_severity?: string;
   incident_category?: string;
   similar_incident_ids?: string;
+  agent_thought_trace?: string;
+  architecture_diagram?: string;
+  chat_history?: string;
   created_at?: string;
 }
 
@@ -313,5 +316,42 @@ export async function changeEmail(newEmail: string) {
   if (!response.ok) throw new Error(data.detail || "Failed to change email");
 
   localStorage.setItem("email", data.email);
+  return data;
+}
+
+
+// ═══════════════════════════ AGENTIC SRE COPILOT ═══════════════════════════
+
+export async function sendAgentChat(incidentId: number, message: string) {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/incidents/${incidentId}/agent/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ message }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Agent chat failed");
+  return data;
+}
+
+export async function executeAgentCommand(incidentId: number, command: string) {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/incidents/${incidentId}/agent/execute`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ command }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Command execution failed");
   return data;
 }

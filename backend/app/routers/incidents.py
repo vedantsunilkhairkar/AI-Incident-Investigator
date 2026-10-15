@@ -13,8 +13,18 @@ from app.schemas.incident import (
     IncidentResponse,
     IncidentStatusUpdate,
     InvestigationResponse,
+    AgentChatRequest,
+    AgentChatResponse,
+    CommandExecuteRequest,
+    CommandExecuteResponse,
 )
 from app.services.ai_service import investigate_incident
+from app.services.agent_service import (
+    run_autonomous_diagnostics,
+    generate_architecture_topology,
+    execute_sandbox_command,
+    chat_with_sre_copilot,
+)
 from app.services.data_cleaner import (
     clean_incident_data,
     validate_incident_data,
@@ -373,6 +383,28 @@ def investigate(
             detail="AI investigation failed. The incident has been returned to Open status.",
         )
 
+    # ── Autonomous SRE Agent Diagnostics & Topology ─────────────────────
+    thought_steps = run_autonomous_diagnostics(
+        application=incident.application,
+        error_message=incident.error,
+        description=incident.description,
+        devops_tool=incident.devops_tool or result.get("devops_tool"),
+        service_or_cluster=incident.service_or_cluster,
+    )
+    architecture_mermaid = generate_architecture_topology(
+        application=incident.application,
+        error_message=incident.error,
+        devops_tool=incident.devops_tool or result.get("devops_tool"),
+        service_or_cluster=incident.service_or_cluster,
+    )
+
+    thought_trace_str = json.dumps(thought_steps)
+    incident.agent_thought_trace = thought_trace_str
+    incident.architecture_diagram = architecture_mermaid
+
+    result["agent_thought_trace"] = thought_trace_str
+    result["architecture_diagram"] = architecture_mermaid
+
     # ── Save results ─────────────────────────────────────────────────────
     incident.root_cause = result["root_cause"]
     incident.investigation_severity = result["severity"]
@@ -394,7 +426,7 @@ def investigate(
         db,
         incident.id,
         "AI Investigation Completed",
-        f"AI DevOps analysis completed by {current_user}.{rag_note}",
+        f"AI DevOps & SRE Autonomous Agent analysis completed by {current_user}.{rag_note}",
         root_cause=result["root_cause"],
         investigation_severity=result["severity"],
         explanation=result["explanation"],
@@ -496,3 +528,97 @@ def get_incident_history(
         }
         for item in history
     ]
+
+
+# ─── AGENT CHAT / SRE COPILOT ────────────────────────────────────────────────
+
+@router.post(
+    "/incidents/{incident_id}/agent/chat",
+    response_model=AgentChatResponse
+)
+def chat_with_incident_agent(
+    incident_id: int,
+    data: AgentChatRequest,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    incident = (
+        db.query(models.Incident)
+        .filter(models.Incident.id == incident_id)
+        .first()
+    )
+
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    history = []
+    if incident.chat_history:
+        try:
+            history = json.loads(incident.chat_history)
+        except Exception:
+            history = []
+
+    context = {
+        "id": incident.id,
+        "application": incident.application,
+        "error": incident.error,
+        "description": incident.description,
+        "devops_tool": incident.devops_tool,
+        "environment": incident.environment,
+        "root_cause": incident.root_cause,
+        "ai_remediation_commands": incident.ai_remediation_commands,
+    }
+
+    reply = chat_with_sre_copilot(
+        incident_context=context,
+        user_message=data.message,
+        chat_history=history,
+    )
+
+    history.append({"role": "user", "content": data.message, "user": current_user})
+    history.append({"role": "assistant", "content": reply})
+
+    incident.chat_history = json.dumps(history)
+    db.commit()
+
+    return AgentChatResponse(reply=reply, updated_chat_history=incident.chat_history)
+
+
+# ─── AGENT SANDBOX COMMAND EXECUTION ─────────────────────────────────────────
+
+@router.post(
+    "/incidents/{incident_id}/agent/execute",
+    response_model=CommandExecuteResponse
+)
+def execute_agent_command(
+    incident_id: int,
+    data: CommandExecuteRequest,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    incident = (
+        db.query(models.Incident)
+        .filter(models.Incident.id == incident_id)
+        .first()
+    )
+
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    res = execute_sandbox_command(data.command)
+
+    add_history(
+        db,
+        incident.id,
+        "Command Executed",
+        f"Command `{data.command[:60]}` executed in SRE Sandbox by {current_user} (Status: {res['exit_code']}, Risk: {res['risk_level']}).",
+    )
+    db.commit()
+
+    return CommandExecuteResponse(
+        command=res["command"],
+        output=res["output"],
+        exit_code=res["exit_code"],
+        duration_ms=res["duration_ms"],
+        risk_level=res["risk_level"],
+    )

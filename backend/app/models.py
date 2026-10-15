@@ -43,6 +43,11 @@ class Incident(Base):
     ml_predicted_severity = Column(String, nullable=True)  # ML severity prediction
     incident_category = Column(String, nullable=True) # e.g. Database, Auth, Network
     similar_incident_ids = Column(Text, nullable=True) # JSON list [3, 7, 12]
+
+    # Agentic & Generative AI fields
+    agent_thought_trace = Column(Text, nullable=True) # JSON serialized multi-step ReAct thought steps
+    architecture_diagram = Column(Text, nullable=True) # Mermaid topology diagram
+    chat_history = Column(Text, nullable=True)         # JSON conversation history with SRE Copilot
     created_at = Column(DateTime, default=datetime.utcnow, nullable=True)
 
 
@@ -63,6 +68,8 @@ class IncidentHistory(Base):
     preventive_action = Column(Text, nullable=True)
     ai_remediation_commands = Column(Text, nullable=True)
     ai_runbook = Column(Text, nullable=True)
+    agent_thought_trace = Column(Text, nullable=True)
+    architecture_diagram = Column(Text, nullable=True)
 
     created_at = Column(
         DateTime,

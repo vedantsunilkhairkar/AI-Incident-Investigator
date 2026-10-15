@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-EMBEDDING_MODEL = "gemini-embedding-exp-03-07"
+EMBEDDING_MODEL = "gemini-embedding-001"
 
 # DevOps & Incident categories for classification
 INCIDENT_CATEGORIES = [
@@ -125,11 +125,18 @@ def predict_category(error: str, description: str) -> str:
 
         Reply with ONLY the category name, nothing else.
         """
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        raw = response.text.strip()
+        raw = ""
+        for model_name in ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.5-flash"]:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                raw = response.text.strip()
+                break
+            except Exception:
+                continue
+
         # Validate it's one of our categories
         for cat in INCIDENT_CATEGORIES:
             if cat.lower() in raw.lower():

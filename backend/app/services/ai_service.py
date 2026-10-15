@@ -117,38 +117,36 @@ def investigate_incident(
         similar_incidents=similar_incidents,
     )
 
-    max_retries = 3
+    candidate_models = ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
+    last_err = None
 
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config={
-                    "response_mime_type": "application/json"
-                }
-            )
-
-            result = json.loads(response.text)
-
-            # Log whether RAG was used
-            if similar_incidents:
-                logger.info(
-                    "RAG investigation completed with %d historical matches",
-                    len(similar_incidents)
+    for model_name in candidate_models:
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config={
+                        "response_mime_type": "application/json"
+                    }
                 )
-            else:
-                logger.info("Standard investigation completed (no historical matches)")
 
-            return result
+                result = json.loads(response.text)
 
-        except Exception as e:
-            error_text = str(e)
+                if similar_incidents:
+                    logger.info(
+                        "RAG investigation completed with %d historical matches using %s",
+                        len(similar_incidents),
+                        model_name
+                    )
+                else:
+                    logger.info("Standard investigation completed using %s", model_name)
 
-            if "503" in error_text or "UNAVAILABLE" in error_text:
-                if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt
-                    time.sleep(wait_time)
-                    continue
+                return result
 
-            raise e
+            except Exception as e:
+                last_err = e
+                logger.warning("Attempt with model %s failed: %s", model_name, e)
+                time.sleep(1)
+
+    raise last_err or RuntimeError("All AI models failed to respond")

@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, field_validator
+from datetime import datetime
 from typing import Literal
+from pydantic import BaseModel, Field, field_validator
 
 
 Status = Literal["Open", "Investigating", "Resolved"]
@@ -57,7 +58,7 @@ class IncidentResponse(BaseModel):
     ml_predicted_severity: str | None = None
     incident_category: str | None = None
     similar_incident_ids: str | None = None
-    created_at: str | None = None
+    created_at: datetime | str | None = None
 
     class Config:
         from_attributes = True

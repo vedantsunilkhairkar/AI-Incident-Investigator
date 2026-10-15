@@ -6,5 +6,6 @@ router = APIRouter()
 @router.get("/health")
 def health_check():
     return {
-        "status": "healthy"
+        "status": "healthy",
+        "service": "AI Incident Investigator"
     }

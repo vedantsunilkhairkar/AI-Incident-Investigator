@@ -1,0 +1,278 @@
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+const TOKEN_KEY = "token";
+
+function getToken(): string | null {
+  return (
+    localStorage.getItem(TOKEN_KEY) ||
+    localStorage.getItem("access_token")
+  );
+}
+
+
+// ═══════════════════════════ AUTH ═══════════════════════════
+
+export function setAuthSession(token: string, username: string, email: string) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem("username", username);
+    localStorage.setItem("email", email);
+    // Crucial for Next.js middleware protection
+    document.cookie = `token=${encodeURIComponent(token)}; path=/; max-age=86400; SameSite=Lax`;
+  }
+}
+
+export function clearAuthSession() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("user");
+    localStorage.removeItem("email");
+    localStorage.removeItem("rememberMe");
+    // Clear cookie
+    document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Lax";
+  }
+}
+
+export async function loginUser(username: string, password: string) {
+  const formData = new URLSearchParams();
+  formData.append("username", username.trim());
+  formData.append("password", password);
+
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: formData.toString(),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Login failed");
+
+  setAuthSession(data.access_token, data.username || username, data.email || "");
+  return data;
+}
+
+export async function registerUser(userData: {
+  username: string;
+  email: string;
+  password: string;
+}) {
+  const response = await fetch(`${API_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: userData.username.trim(),
+      email: userData.email.trim(),
+      password: userData.password,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Registration failed");
+  return data;
+}
+
+
+// ═══════════════════════════ INCIDENTS ═══════════════════════════
+
+export async function getIncidents(params?: {
+  severity?: string;
+  status?: string;
+  category?: string;
+  skip?: number;
+  limit?: number;
+}) {
+  const token = getToken();
+  const query = new URLSearchParams();
+
+  if (params?.severity) query.append("severity", params.severity);
+  if (params?.status) query.append("status", params.status);
+  if (params?.category) query.append("category", params.category);
+  if (params?.skip !== undefined) query.append("skip", String(params.skip));
+  if (params?.limit !== undefined) query.append("limit", String(params.limit));
+
+  const url = `${API_URL}/incidents${query.toString() ? "?" + query.toString() : ""}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to fetch incidents");
+  return data;
+}
+
+
+export async function getIncident(id: number) {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/incidents/${id}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to fetch incident");
+  return data;
+}
+
+
+export async function createIncident(incidentData: {
+  application: string;
+  error: string;
+  severity: string;
+  description: string;
+}) {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/incidents`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      application: incidentData.application,
+      error: incidentData.error,
+      severity: incidentData.severity,
+      description: incidentData.description,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to create incident");
+  return data;
+}
+
+
+export async function updateIncidentStatus(id: number, status: string) {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/incidents/${id}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ status }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to update status");
+  return data;
+}
+
+
+// ═══════════════════════════ ML: SIMILAR INCIDENTS ═══════════════════════════
+
+export async function getSimilarIncidents(id: number) {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/incidents/${id}/similar`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to fetch similar incidents");
+  return data;
+}
+
+
+// ═══════════════════════════ ANALYTICS ═══════════════════════════
+
+export async function getAnalyticsSummary() {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/analytics/summary`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to fetch analytics");
+  return data;
+}
+
+
+export async function getTopApps(limit = 5) {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/analytics/top-apps?limit=${limit}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to fetch top apps");
+  return data;
+}
+
+
+export async function getCategories() {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/analytics/categories`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to fetch categories");
+  return data;
+}
+
+
+export async function getRepeatErrors() {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/analytics/repeat-errors`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to fetch repeat errors");
+  return data;
+}
+
+
+export async function getTrend(days = 7) {
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}/analytics/trend?days=${days}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to fetch trend");
+  return data;
+}
+
+
+// ═══════════════════════════ AUTH — PROFILE ═══════════════════════════
+
+export async function changeEmail(newEmail: string) {
+  const token = getToken();
+
+  const params = new URLSearchParams();
+  params.append("new_email", newEmail);
+
+  const response = await fetch(
+    `${API_URL}/auth/email?${params.toString()}`,
+    {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to change email");
+
+  localStorage.setItem("email", data.email);
+  return data;
+}

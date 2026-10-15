@@ -1,7 +1,7 @@
 from .database import engine, Base,SessionLocal
 from . import models
 from fastapi import FastAPI,Depends
-from app.routers import system,health,incidents
+from app.routers import system, health, incidents, auth, analytics
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,18 +16,17 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.get("/health")
-def health_check():
-    return {
-        "status": "healthy",
-        "service": "AI Incident Investigator"
-    }
 
 def get_db():
     db = SessionLocal()
@@ -47,3 +46,5 @@ def home():
 app.include_router(system.router)
 app.include_router(health.router)
 app.include_router(incidents.router)
+app.include_router(auth.router)
+app.include_router(analytics.router)

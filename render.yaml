@@ -24,4 +24,4 @@ databases:
     region: oregon
     plan: free
     databaseName: ai_incident_investigator
-    user: postgres
+    user: incident_user

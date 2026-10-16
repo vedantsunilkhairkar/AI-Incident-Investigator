@@ -13,6 +13,10 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:vedant123@127.0.0.1:5432/ai_incident_investigator"
 )
 
+# Render provides connection strings with 'postgres://', but SQLAlchemy requires 'postgresql://'
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 engine = create_engine(DATABASE_URL)
 
 SessionLocal = sessionmaker(

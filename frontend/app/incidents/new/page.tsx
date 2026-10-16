@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createIncident } from "../../../services/api";
@@ -78,15 +78,13 @@ export default function NewIncidentPage() {
   const [isAuthError, setIsAuthError] = useState(false);
 
   // Check login status on page mount
-  useState(() => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token") || localStorage.getItem("access_token");
-      if (!token || token === "null" || token === "undefined") {
-        setErrorMessage("You are not logged in. Please log in first to create incidents.");
-        setIsAuthError(true);
-      }
+  useEffect(() => {
+    const token = localStorage.getItem("token") || localStorage.getItem("access_token");
+    if (!token || token === "null" || token === "undefined") {
+      setErrorMessage("You are not logged in. Please log in first to create incidents.");
+      setIsAuthError(true);
     }
-  });
+  }, []);
 
   const applyPreset = (preset: typeof PRESETS[0]) => {
     setApplication(preset.app);

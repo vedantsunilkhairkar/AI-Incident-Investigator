@@ -9,8 +9,8 @@ from jose import JWTError, jwt
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-SECRET_KEY = os.getenv(
-    "JWT_SECRET_KEY",
+SECRET_KEY = os.getenv("JWT_SECRET_KEY") or os.getenv(
+    "SECRET_KEY",
     "ai-incident-investigator-secret-key-2026"
 )
 

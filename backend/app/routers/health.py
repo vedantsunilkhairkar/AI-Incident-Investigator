@@ -9,3 +9,8 @@ def health_check():
         "status": "healthy",
         "service": "AI Incident Investigator"
     }
+
+
+@router.get("/api/health")
+def api_health_check():
+    return health_check()

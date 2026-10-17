@@ -332,6 +332,45 @@ export async function getIncidentHistory(id: number): Promise<IncidentHistoryIte
   }
 }
 
+export interface InvestigationHistoryRecord {
+  id: number;
+  incident_id: number;
+  application: string;
+  error: string;
+  severity: string;
+  environment?: string;
+  devops_tool?: string;
+  status?: string;
+  action: string;
+  description?: string;
+  root_cause?: string;
+  investigation_severity?: string;
+  explanation?: string;
+  suggested_solution?: string;
+  preventive_action?: string;
+  created_at: string;
+}
+
+export async function getAllInvestigationHistory(limit = 50): Promise<InvestigationHistoryRecord[]> {
+  const token = getToken();
+
+  try {
+    const response = await fetch(`${API_URL}/incidents/history/all?limit=${limit}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+    return [];
+  } catch (err) {
+    console.warn("Could not fetch all investigation history:", err);
+    return [];
+  }
+}
+
 
 export async function createIncident(incidentData: {
   application: string;

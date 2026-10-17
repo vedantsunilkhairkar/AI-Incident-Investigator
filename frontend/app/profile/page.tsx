@@ -109,6 +109,13 @@ export default function ProfilePage() {
           </Link>
 
           <Link
+            href="/history"
+            className="block rounded-xl px-4 py-3 text-slate-400 transition hover:bg-white/5 hover:text-white"
+          >
+            Investigation History
+          </Link>
+
+          <Link
             href="/profile"
             className="block rounded-xl bg-blue-600/20 px-4 py-3 font-medium text-blue-400"
           >

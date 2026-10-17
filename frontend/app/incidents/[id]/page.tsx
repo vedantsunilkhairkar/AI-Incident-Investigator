@@ -525,7 +525,16 @@ ${incident.preventive_action || "N/A"}
                 onClick={() => router.push("/")}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-cyan-300 transition"
               >
-                <span>←</span> Back to Dashboard
+                <span>←</span> Dashboard
+              </button>
+
+              <span className="text-slate-600">/</span>
+
+              <button
+                onClick={() => router.push("/history")}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-cyan-300 transition"
+              >
+                <span>🕒</span> History
               </button>
 
               <span className="text-slate-600">|</span>

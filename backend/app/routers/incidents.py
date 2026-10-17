@@ -486,6 +486,55 @@ def get_similar_incidents(
 
 # ─── INCIDENT HISTORY ────────────────────────────────────────────────────────
 
+@router.get("/incidents/history/all")
+def get_all_investigation_history(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    try:
+        history_items = (
+            db.query(
+                models.IncidentHistory,
+                models.Incident.application,
+                models.Incident.error,
+                models.Incident.severity,
+                models.Incident.environment,
+                models.Incident.devops_tool,
+                models.Incident.status,
+            )
+            .join(models.Incident, models.Incident.id == models.IncidentHistory.incident_id)
+            .order_by(models.IncidentHistory.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+        return [
+            {
+                "id": h.id,
+                "incident_id": h.incident_id,
+                "application": app,
+                "error": err,
+                "severity": sev,
+                "environment": env,
+                "devops_tool": devops,
+                "status": status,
+                "action": h.action,
+                "description": h.description,
+                "root_cause": h.root_cause,
+                "investigation_severity": h.investigation_severity,
+                "explanation": h.explanation,
+                "suggested_solution": h.suggested_solution,
+                "preventive_action": h.preventive_action,
+                "created_at": h.created_at,
+            }
+            for h, app, err, sev, env, devops, status in history_items
+        ]
+    except Exception as e:
+        logger.error("Error retrieving all incident history: %s", e)
+        return []
+
+
 @router.get("/incidents/{incident_id}/history")
 def get_incident_history(
     incident_id: int,

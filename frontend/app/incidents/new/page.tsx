@@ -164,6 +164,18 @@ export default function NewIncidentPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link
+              href="/history"
+              className="flex items-center gap-1.5 rounded-xl border border-slate-700/80 bg-slate-900/80 px-3 py-1.5 text-xs font-medium text-slate-300 hover:border-slate-500 hover:text-white transition"
+              title="Investigation History"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
+              </svg>
+              <span>History</span>
+            </Link>
+
             <a
               href="https://github.com/vedantsunilkhairkar/AI-Incident-Investigator"
               target="_blank"

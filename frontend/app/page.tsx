@@ -444,6 +444,22 @@ export default function Dashboard() {
 
             <button
               onClick={() => {
+                router.push("/history");
+                setMobileNavOpen(false);
+              }}
+              className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-slate-400 transition hover:bg-white/[0.04] hover:text-white"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.03] group-hover:bg-white/[0.06]">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 6v6l4 2" />
+                </svg>
+              </span>
+              Investigation History
+            </button>
+
+            <button
+              onClick={() => {
                 router.push("/profile");
                 setMobileNavOpen(false);
               }}

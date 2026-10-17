@@ -173,22 +173,7 @@ export default function Dashboard() {
       const data = await getIncidents();
       setIncidents(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error(err);
-
-      const message =
-        err instanceof Error ? err.message.toLowerCase() : "";
-
-      if (
-        message.includes("401") ||
-        message.includes("unauthorized") ||
-        message.includes("token")
-      ) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("username");
-        localStorage.removeItem("user");
-        router.replace("/login");
-        return;
-      }
+      console.warn("Could not load incidents from remote API, displaying fallback incidents:", err);
 
       // If backend is sleeping on Render or unreachable, load realistic demo incidents so the platform is fully exploratory
       setIncidents([

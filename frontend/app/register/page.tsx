@@ -99,7 +99,7 @@ export default function RegisterPage() {
       });
 
       document.cookie = `token=${encodeURIComponent(data.access_token)}; path=/; max-age=86400; SameSite=Lax`;
-      router.push("/");
+      window.location.href = "/";
     } catch (err: any) {
       setError(err.message || "Google registration failed. Please try again.");
     } finally {

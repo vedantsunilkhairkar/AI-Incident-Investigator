@@ -72,7 +72,7 @@ export default function LoginPage() {
     try {
       const data = await loginWithGoogle({ credential: response.credential });
       document.cookie = `token=${encodeURIComponent(data.access_token)}; path=/; max-age=86400; SameSite=Lax`;
-      router.push("/");
+      window.location.href = "/";
     } catch (err: any) {
       setError(err.message || "Google sign-in failed. Please try again.");
     } finally {
@@ -111,7 +111,7 @@ export default function LoginPage() {
 
       // Set cookie for middleware
       document.cookie = `token=${encodeURIComponent(data.access_token)}; path=/; max-age=86400; SameSite=Lax`;
-      router.push("/");
+      window.location.href = "/";
     } catch (err: any) {
       setError(err.message || "Google authentication failed. Please try again.");
     } finally {
@@ -150,7 +150,7 @@ export default function LoginPage() {
         localStorage.removeItem("savedUsername");
       }
 
-      router.push("/");
+      window.location.href = "/";
     } catch (err: any) {
       setError(err.message || "Invalid username or password");
     } finally {

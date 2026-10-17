@@ -110,9 +110,12 @@ export default function RegisterPage() {
   const handleCustomGoogleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!customGoogleEmail.trim()) return;
+    const cleanEmail = customGoogleEmail.trim().toLowerCase();
+    const derivedName = cleanEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const finalName = customGoogleName.trim() || derivedName;
     handleSelectGoogleAccount({
-      email: customGoogleEmail.trim(),
-      name: customGoogleName.trim() || customGoogleEmail.split("@")[0],
+      email: cleanEmail,
+      name: finalName,
     });
   };
 

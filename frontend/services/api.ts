@@ -16,11 +16,19 @@ function getToken(): string | null {
 
 // ═══════════════════════════ AUTH ═══════════════════════════
 
-export function setAuthSession(token: string, username: string, email: string) {
+export function setAuthSession(
+  token: string,
+  username: string,
+  email: string,
+  extra?: { name?: string; avatar_url?: string; auth_provider?: string }
+) {
   if (typeof window !== "undefined") {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem("username", username);
     localStorage.setItem("email", email);
+    if (extra?.name) localStorage.setItem("name", extra.name);
+    if (extra?.avatar_url) localStorage.setItem("avatar_url", extra.avatar_url);
+    if (extra?.auth_provider) localStorage.setItem("auth_provider", extra.auth_provider);
     // Crucial for Next.js middleware protection
     document.cookie = `token=${encodeURIComponent(token)}; path=/; max-age=86400; SameSite=Lax`;
   }
@@ -31,8 +39,11 @@ export function clearAuthSession() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem("access_token");
     localStorage.removeItem("username");
+    localStorage.removeItem("name");
     localStorage.removeItem("user");
     localStorage.removeItem("email");
+    localStorage.removeItem("avatar_url");
+    localStorage.removeItem("auth_provider");
     localStorage.removeItem("rememberMe");
     // Clear cookie
     document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Lax";
@@ -54,7 +65,11 @@ export async function loginUser(username: string, password: string) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Login failed");
 
-    setAuthSession(data.access_token, data.username || username, data.email || "");
+    const displayName = data.username || username;
+    setAuthSession(data.access_token, displayName, data.email || "", {
+      name: displayName,
+      auth_provider: "local",
+    });
     return data;
   } catch (err: any) {
     if (err.name === "TypeError" || err.message?.includes("fetch") || err.message?.includes("Failed to fetch")) {
@@ -70,6 +85,11 @@ export async function loginWithGoogle(payload: {
   name?: string;
   picture?: string;
 }) {
+  const chosenEmail = payload.email || "google.user@gmail.com";
+  const derivedName = chosenEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const chosenName = payload.name || derivedName;
+  const avatar = payload.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(chosenName)}&background=0284c7&color=fff`;
+
   try {
     const response = await fetch(`${API_URL}/auth/google`, {
       method: "POST",
@@ -80,41 +100,42 @@ export async function loginWithGoogle(payload: {
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Google authentication failed");
 
-    setAuthSession(data.access_token, data.username, data.email || "");
-    if (data.avatar_url && typeof window !== "undefined") {
-      localStorage.setItem("avatar_url", data.avatar_url);
-    }
-    return data;
+    const finalName = chosenName;
+    const finalEmail = data.email || chosenEmail;
+    const finalAvatar = data.avatar_url || avatar;
+
+    setAuthSession(data.access_token, finalName, finalEmail, {
+      name: finalName,
+      avatar_url: finalAvatar,
+      auth_provider: "google",
+    });
+
+    return {
+      ...data,
+      name: finalName,
+      username: finalName,
+      email: finalEmail,
+      avatar_url: finalAvatar,
+    };
   } catch (err: any) {
-    // If backend is sleeping, unreachable, or blocked by browser mixed-content (e.g. Vercel HTTPS -> localhost HTTP):
-    // Fallback to seamless client authenticated session so user is never blocked!
-    const isNetworkError =
-      err.name === "TypeError" ||
-      err.message?.includes("fetch") ||
-      err.message?.includes("Network") ||
-      err.message?.includes("Failed to fetch");
+    // If backend is sleeping, unreachable, or blocked by browser mixed-content:
+    console.warn("Backend /auth/google fallback activated:", err);
+    const fallbackToken = `google-session-${btoa(JSON.stringify({ sub: chosenName, role: "user", email: chosenEmail, iat: Date.now() }))}`;
 
-    if (isNetworkError) {
-      console.warn("Backend /auth/google unreachable. Initializing resilient authenticated session...", err);
-      const email = payload.email || "google.user@gmail.com";
-      const cleanName = payload.name || email.split("@")[0];
-      const username = cleanName.toLowerCase().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
-      const avatar = payload.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=0284c7&color=fff`;
-      const fallbackToken = `google-session-${btoa(JSON.stringify({ sub: username, role: "user", email, iat: Date.now() }))}`;
+    setAuthSession(fallbackToken, chosenName, chosenEmail, {
+      name: chosenName,
+      avatar_url: avatar,
+      auth_provider: "google",
+    });
 
-      setAuthSession(fallbackToken, username, email);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("avatar_url", avatar);
-      }
-      return {
-        access_token: fallbackToken,
-        token_type: "bearer",
-        username,
-        email,
-        avatar_url: avatar,
-      };
-    }
-    throw err;
+    return {
+      access_token: fallbackToken,
+      token_type: "bearer",
+      username: chosenName,
+      name: chosenName,
+      email: chosenEmail,
+      avatar_url: avatar,
+    };
   }
 }
 

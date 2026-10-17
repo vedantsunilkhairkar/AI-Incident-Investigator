@@ -12,3 +12,11 @@ class TokenResponse(BaseModel):
     token_type: str
     username: str
     email: EmailStr
+    avatar_url: str | None = None
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str | None = None
+    email: EmailStr | None = None
+    name: str | None = None
+    picture: str | None = None

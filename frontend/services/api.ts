@@ -56,6 +56,28 @@ export async function loginUser(username: string, password: string) {
   return data;
 }
 
+export async function loginWithGoogle(payload: {
+  credential?: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+}) {
+  const response = await fetch(`${API_URL}/auth/google`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Google authentication failed");
+
+  setAuthSession(data.access_token, data.username, data.email || "");
+  if (data.avatar_url && typeof window !== "undefined") {
+    localStorage.setItem("avatar_url", data.avatar_url);
+  }
+  return data;
+}
+
 export async function registerUser(userData: {
   username: string;
   email: string;

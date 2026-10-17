@@ -424,6 +424,51 @@ export default function Dashboard() {
           <div className="my-6 h-px bg-white/[0.06]" />
 
           <p className="px-3 pb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">
+            Project & Source
+          </p>
+
+          <div className="space-y-1">
+            <a
+              href="https://github.com/vedantsunilkhairkar/AI-Incident-Investigator"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-400 transition hover:bg-white/[0.04] hover:text-white"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.03] text-slate-300 group-hover:bg-white/[0.06] group-hover:text-white">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                </svg>
+              </span>
+              <span className="flex-1 truncate">GitHub Repository</span>
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-slate-600 transition group-hover:text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M7 17L17 7M17 7H7M17 7V17" />
+              </svg>
+            </a>
+
+            <a
+              href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/docs`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-400 transition hover:bg-white/[0.04] hover:text-white"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.03] text-cyan-300 group-hover:bg-cyan-500/10">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>
+              </span>
+              <span className="flex-1 truncate">Swagger API Docs</span>
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-slate-600 transition group-hover:text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M7 17L17 7M17 7H7M17 7V17" />
+              </svg>
+            </a>
+          </div>
+
+          <div className="my-6 h-px bg-white/[0.06]" />
+
+          <p className="px-3 pb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">
             System
           </p>
 
@@ -503,6 +548,35 @@ export default function Dashboard() {
             </div>
 
             <div className="flex items-center gap-2">
+              <a
+                href="https://github.com/vedantsunilkhairkar/AI-Incident-Investigator"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
+                title="View GitHub Repository"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                </svg>
+                <span className="hidden sm:inline">GitHub</span>
+              </a>
+
+              <a
+                href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/docs`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden md:flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-medium text-cyan-300 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-cyan-200"
+                title="View Swagger API Documentation"
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>
+                <span>API Docs</span>
+              </a>
+
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
@@ -1165,14 +1239,55 @@ export default function Dashboard() {
             )}
           </section>
 
-          {/* Bottom platform info */}
-          <div className="mt-5 flex flex-col gap-2 px-1 text-[10px] text-slate-700 sm:flex-row sm:items-center sm:justify-between">
-            <p>IncidentAI • AI-powered software incident management</p>
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/70" />
-              <span>API connected</span>
+          {/* Bottom platform info & links */}
+          <footer className="mt-8 flex flex-col gap-3 border-t border-white/[0.06] pt-6 px-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+              <span className="font-semibold text-slate-300">IncidentAI SRE Platform</span>
+              <span className="text-slate-700">•</span>
+              <a
+                href="https://github.com/vedantsunilkhairkar/AI-Incident-Investigator"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-slate-400 hover:text-white transition"
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                </svg>
+                <span>GitHub Repository</span>
+                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M7 17L17 7M17 7H7M17 7V17" />
+                </svg>
+              </a>
+              <span className="text-slate-700">•</span>
+              <a
+                href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/docs`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 transition"
+              >
+                <span>Swagger API Docs</span>
+                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M7 17L17 7M17 7H7M17 7V17" />
+                </svg>
+              </a>
             </div>
-          </div>
+
+            <div className="flex items-center gap-4 text-[11px]">
+              <div className="flex items-center gap-1.5 text-slate-500">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>API connected</span>
+              </div>
+              <span className="text-slate-700">|</span>
+              <a
+                href="https://github.com/vedantsunilkhairkar"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-400 hover:text-cyan-300 transition"
+              >
+                Built by <span className="font-semibold text-slate-300 hover:underline">Vedant Sunil Khairkar</span>
+              </a>
+            </div>
+          </footer>
         </div>
       </main>
     </div>

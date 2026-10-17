@@ -4,8 +4,10 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   getSimilarIncidents,
+  getIncidentHistory,
   sendAgentChat,
   executeAgentCommand,
+  IncidentHistoryItem,
 } from "../../../services/api";
 
 interface Incident {
@@ -123,6 +125,23 @@ export default function IncidentDetailsPage() {
   const [similarLoading, setSimilarLoading] = useState(false);
   const [expandedSimilar, setExpandedSimilar] = useState<number | null>(null);
 
+  // Incident Audit Trail & History state
+  const [history, setHistory] = useState<IncidentHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const fetchHistory = async () => {
+    if (!incidentId) return;
+    setHistoryLoading(true);
+    try {
+      const items = await getIncidentHistory(Number(incidentId));
+      setHistory(items);
+    } catch (err) {
+      console.warn("Could not load incident history:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const fetchIncident = async () => {
     try {
       const token = localStorage.getItem("token") || localStorage.getItem("access_token");
@@ -235,6 +254,7 @@ export default function IncidentDetailsPage() {
     if (incidentId) {
       fetchIncident();
       fetchSimilar();
+      fetchHistory();
     }
   }, [incidentId]);
 
@@ -1124,6 +1144,94 @@ ${incident.preventive_action || "N/A"}
                         </button>
                       </div>
                     )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ═══ 8. INCIDENT AUDIT TRAIL & ACTION HISTORY ═══ */}
+        <section className="overflow-hidden rounded-3xl border border-slate-800 bg-[#0a101f] shadow-2xl">
+          <div className="border-b border-slate-800/80 bg-gradient-to-r from-slate-800/30 via-transparent to-blue-500/10 p-5 sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/60 text-xl font-bold">
+                  📜
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg font-bold sm:text-xl">Incident Audit Trail & History</h3>
+                    <span className="rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-300">
+                      {history.length} Event{history.length === 1 ? "" : "s"} Recorded
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Chronological lifecycle of status updates, investigations, and remediation actions
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={fetchHistory}
+                disabled={historyLoading}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
+              >
+                <span>🔄</span>
+                <span>Refresh History</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-7">
+            {historyLoading ? (
+              <div className="flex items-center gap-3 py-6 text-slate-500">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-700 border-t-cyan-400" />
+                <span className="text-sm">Loading audit history...</span>
+              </div>
+            ) : history.length === 0 ? (
+              <div className="rounded-2xl border border-slate-800 bg-[#060a14] p-6 text-center">
+                <p className="text-sm text-slate-400">
+                  Initial incident recorded. Every status change, diagnostic run, or remediation action will be logged in this audit trail.
+                </p>
+              </div>
+            ) : (
+              <div className="relative border-l border-slate-800 ml-4 pl-6 space-y-6">
+                {history.map((item, idx) => (
+                  <div key={item.id || idx} className="relative group">
+                    {/* Timeline bullet */}
+                    <div className="absolute -left-[31px] top-1.5 h-3.5 w-3.5 rounded-full border-2 border-slate-900 bg-cyan-400 shadow-sm shadow-cyan-400/50" />
+
+                    <div className="rounded-2xl border border-slate-800/90 bg-[#060a14] p-4 transition hover:border-slate-700">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <span className="inline-flex items-center rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-0.5 text-xs font-semibold text-cyan-300">
+                          {item.action}
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-500">
+                          {new Date(item.created_at).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {item.description && (
+                        <p className="text-xs text-slate-300 leading-relaxed mb-2">
+                          {item.description}
+                        </p>
+                      )}
+
+                      {item.root_cause && (
+                        <div className="mt-2 rounded-xl bg-blue-500/[0.06] border border-blue-500/20 p-2.5 text-xs text-blue-200">
+                          <span className="font-semibold text-blue-400">Root Cause Discovered: </span>
+                          {item.root_cause}
+                        </div>
+                      )}
+
+                      {item.suggested_solution && (
+                        <div className="mt-2 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 p-2.5 text-xs text-emerald-200">
+                          <span className="font-semibold text-emerald-400">Remediation: </span>
+                          {item.suggested_solution}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

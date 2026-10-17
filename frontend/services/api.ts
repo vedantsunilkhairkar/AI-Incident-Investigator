@@ -233,6 +233,19 @@ export const SAMPLE_INCIDENTS: Incident[] = [
   },
 ];
 
+export interface IncidentHistoryItem {
+  id: number;
+  incident_id: number;
+  action: string;
+  description?: string;
+  root_cause?: string;
+  investigation_severity?: string;
+  explanation?: string;
+  suggested_solution?: string;
+  preventive_action?: string;
+  created_at: string;
+}
+
 export async function getIncidents(params?: {
   severity?: string;
   status?: string;
@@ -243,12 +256,6 @@ export async function getIncidents(params?: {
   limit?: number;
 }) {
   const token = getToken();
-
-  // If using demo / fallback session, return sample incidents immediately without hitting 401
-  if (token?.startsWith("google-session-")) {
-    return SAMPLE_INCIDENTS;
-  }
-
   const query = new URLSearchParams();
 
   if (params?.severity) query.append("severity", params.severity);
@@ -267,14 +274,13 @@ export async function getIncidents(params?: {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (response.status === 401) {
-      console.warn("Backend unauthorized for incidents, serving fallback data");
-      return SAMPLE_INCIDENTS;
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) return data;
     }
 
-    const data = await response.json();
-    if (!response.ok) return SAMPLE_INCIDENTS;
-    return Array.isArray(data) ? data : SAMPLE_INCIDENTS;
+    // If empty or unauthorized, provide sample incidents as fallback
+    return SAMPLE_INCIDENTS;
   } catch (err) {
     console.warn("Could not fetch remote incidents, serving fallback data:", err);
     return SAMPLE_INCIDENTS;
@@ -285,30 +291,44 @@ export async function getIncidents(params?: {
 export async function getIncident(id: number) {
   const token = getToken();
 
-  if (token?.startsWith("google-session-")) {
-    const found = SAMPLE_INCIDENTS.find((i) => i.id === id);
-    if (found) return found;
-    return { ...SAMPLE_INCIDENTS[0], id };
-  }
-
   try {
     const response = await fetch(`${API_URL}/incidents/${id}`, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (!response.ok) {
-      const found = SAMPLE_INCIDENTS.find((i) => i.id === id);
-      if (found) return found;
-      return { ...SAMPLE_INCIDENTS[0], id };
+    if (response.ok) {
+      const data = await response.json();
+      return data;
     }
 
-    const data = await response.json();
-    return data;
+    const found = SAMPLE_INCIDENTS.find((i) => i.id === id);
+    if (found) return found;
+    return { ...SAMPLE_INCIDENTS[0], id };
   } catch (err) {
     const found = SAMPLE_INCIDENTS.find((i) => i.id === id);
     if (found) return found;
     return { ...SAMPLE_INCIDENTS[0], id };
+  }
+}
+
+export async function getIncidentHistory(id: number): Promise<IncidentHistoryItem[]> {
+  const token = getToken();
+
+  try {
+    const response = await fetch(`${API_URL}/incidents/${id}/history`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data)) return data;
+    }
+    return [];
+  } catch (err) {
+    console.warn("Could not fetch incident history:", err);
+    return [];
   }
 }
 

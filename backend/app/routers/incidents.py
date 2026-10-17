@@ -207,6 +207,18 @@ def get_incident(
     )
 
     if not incident:
+        try:
+            from app.main import seed_demo_incidents
+            seed_demo_incidents()
+            incident = (
+                db.query(models.Incident)
+                .filter(models.Incident.id == incident_id)
+                .first()
+            )
+        except Exception as e:
+            logger.warning("Auto-seed fallback error for incident %s: %s", incident_id, e)
+
+    if not incident:
         raise HTTPException(
             status_code=404,
             detail="Incident not found"
